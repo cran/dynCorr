@@ -1,10 +1,9 @@
-2731e02e50ae3b36f3d95ba593a706d1 *DESCRIPTION
+883d97466263bfe12b8617b4beed2468 *DESCRIPTION
 e1a8045ae730d201dd4bd388ac2d7222 *INDEX
-af360b14a788ca136081665128d7ddb4 *NAMESPACE
+3b99f42907b369ca287e5bdea049525b *NAMESPACE
 9809346dc9e050c6ea4b9964b52c43fb *R/bootstrapCI.r
 09da94457b22cd79049afe24a04e78ab *R/dynamicCorrelation.r
-5bb0a0bcdc81d51d9e80677b7954f7f8 *R/firstlib.r
 cfd10f63f1ccc720b7f2c5e4e5dfa941 *data/dynCorrData.txt
-33085433a5281e6ebcca74c9744210e6 *man/bootstrapCI.rd
+9f8b2bbb183968303bcd217607d42ffa *man/bootstrapCI.rd
 d2de7d522db408671c1ce92f65d7882a *man/dynCorrData.rd
 67fbdf9986042da4efc80d54e4f57101 *man/dynamicCorrelation.rd

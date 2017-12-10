@@ -7,8 +7,9 @@
 #'
 #' @usage
 #' bootstrapCI(dataFrame, depVar, indepVar, subjectVar, function.choice,
-#'             width.range, width.place, boundary.trunc, byOrder,
-#'             max.dynCorrLag, B, percentile, by.deriv.only, seed)
+#'             width.range, width.place, min.obs, points.length, points.by,
+#'             boundary.trunc, byOrder, max.dynCorrLag, B, percentile,
+#'             by.deriv.only, seed)
 #'
 #' @param dataFrame The data frame that contains the dependent
 #'  variables/responses, the independent variable (often time),
@@ -60,6 +61,26 @@
 #'  endpoints for each response, or a single vector of endpoints that is
 #'  used for each of the responses; default is no endpoints specified
 #'  which means constant global bandwidth throughout the range of indepVar.
+#'
+#' @param min.obs Minimum oberservation (follow-up period) required.
+#'  If specified, individuals whose follow-up period shorter than min.obs will
+#'  be removed from calculation. Default = NA (use whole dataset provided).
+#'
+#' @param points.length Number of indep (time) points for dynamic correlation 
+#'  calculation for each response of each individual. This is the number of 
+#'  points between time 0 and minimum of maximum of individual follow-up 
+#'  periods (max_common_obs). Note that each individual’s full follow-up 
+#'  time span is used in the local polynomial regression curve smoothing 
+#'  step, but only the first points.length number of time points (from time 0 
+#'  to max_common_obs) is used in the following dynamic correlation calculation. 
+#'  Default points.length value is set to 100; points.length takes precedence 
+#'  unless points.by is specified.
+#'
+#' @param points.by Interval between indep (time) points for local polynomial
+#'  regression curve smoothing for each response of each individual.
+#'  Both integer and non-integer value could be specified, and time grid will
+#'  be computed accordingly. Note that points.length takes precedence
+#'  (default = 100) unless points.by is specified.
 #'
 #' @param boundary.trunc Indicate the boundary of indepVar that should be
 #'  truncated after smoothing; this may be done in case of concerns about
@@ -133,12 +154,13 @@
 #' ##            function only. Note that B=200 or greater should be
 #' ##            considered for real data analysis.
 #'
-#' examp1.bs <- bootstrapCI(dataFrame=dynCorrData,
-#'                          depVar=c('resp1', 'resp2', 'resp3'),
-#'                          indepVar='time',
+#' examp1.bs <- bootstrapCI(dataFrame = dynCorrData,
+#'                          depVar = c('resp1', 'resp2', 'resp3'),
+#'                          indepVar = 'time',
 #'                          subjectVar = 'subject',
+#'                          points.by = 1,
 #'                          function.choice = c(1,0,0),
-#'                          B = 2, percentile=c(0.025, 0.975), seed = 5)
+#'                          B = 2, percentile = c(0.025, 0.975), seed = 5)
 #' examp1.bs
 #'
 #' ## Example 2: using default smoothing parameters, obtain bootstrap CI
@@ -147,12 +169,13 @@
 #' ##            Note that B=200 or greater should be considered for real
 #' ##            data analysis.
 #'
-#' examp2.bs <- bootstrapCI(dataFrame=dynCorrData,
-#'                          depVar=c('resp1', 'resp2', 'resp3'),
-#'                          indepVar='time',
+#' examp2.bs <- bootstrapCI(dataFrame = dynCorrData,
+#'                          depVar = c('resp1', 'resp2', 'resp3'),
+#'                          indepVar = 'time',
 #'                          subjectVar = 'subject',
+#'                          points.by = 1,
 #'                          function.choice = c(1,0,0), max.dynCorrLag = -10,
-#'                          B = 2, percentile=c(0.01, 0.99), seed = 7)
+#'                          B = 2, percentile = c(0.01, 0.99), seed = 7)
 #' examp2.bs
 #'
 #' @export
@@ -170,6 +193,9 @@ bootstrapCI <- function (dataFrame,
                                          ((range(dataFrame[[indepVar]]))[2] -
                                             (range(dataFrame[[indepVar]]))[1])/4),
                          width.place = c(NA, NA),
+                         min.obs = NA,
+                         points.length = 100,
+                         points.by = NA,
                          boundary.trunc = c(0, 0),
                          byOrder = c(),
                          max.dynCorrLag = 0,
@@ -179,6 +205,29 @@ bootstrapCI <- function (dataFrame,
                          seed = 299)
 {
   ## --------------------Set up -------------------
+
+  # Nov-2017 Introduce new parametew min.obs (modify dataset if min.obs
+  # is specified)
+  if (!is.na(min.obs)) {
+    vec <- unique(dataFrame[[subjectVar]]) # list of individuals id
+    dep_var = dataFrame[depVar]
+    subject_var = dataFrame[[subjectVar]]
+    indep_var = dataFrame[[indepVar]]
+    
+    to_remove <- c()
+    for (i in 1:length(vec)) {
+      ind_time <-max(indep_var[subject_var == vec[i]])
+      if (ind_time < min.obs) {
+        to_remove <- c(to_remove, vec[i])
+      }
+    }
+    
+    for (i in 1:length(to_remove)) {
+      dataFrame <- dataFrame[subject_var!=to_remove[i],]
+      subject_var <-subject_var[subject_var!=to_remove[i]]
+      indep_var <- indep_var[subject_var!=to_remove[i]]
+    }
+  }
 
   vec <- unique(dataFrame[[subjectVar]]) # list of individuals id
   dep_var = dataFrame[depVar]
@@ -238,9 +287,22 @@ bootstrapCI <- function (dataFrame,
     v_ob_time <- c(v_ob_time, max(indep_var[subject_var == vec[i]]))
   }
   limit <- min(v_ob_time) # max common obs
+  
 
+  # Sep 2017 - calculate points.by if it is not specified
+  if (is.na(points.by)) {
+    points.by <- limit/points.length
+  }
 
-
+  # Nov 2017 - add output table
+  max_limit <- max(v_ob_time)
+  base <- min(indep_var[subject_var == vec[1]])
+  max_limit <- max_limit - base
+  min_max_limit <- limit - base
+  n <- length(vec)
+  data_summary <- matrix(c(n,min_max_limit,max_limit), ncol=3, byrow=TRUE)
+  colnames(data_summary) <- c('sample.size','min.max.time','max.max.time')
+  
   ## ------------ Smooth Curves -----------------------
   smoothedCurves <- vector(mode = "list", num_vec)
   for (k in 1:num_vec) {
@@ -258,8 +320,14 @@ bootstrapCI <- function (dataFrame,
       if (is.na(width.place[[i]][2])) {
         cur_wplace[2] <- max_indep
       }
-      points.use = seq(l_trunc, ceiling(max_indep- h_trunc), by = 1)
-      size <- ceiling(max_indep- h_trunc) - l_trunc + 1
+
+      # Aug-2017 Update: change points.use to accommodate non-integer time grid
+      # prior to v1.0.0, points.use assumes integer values
+      # points.use = seq(l_trunc, ceiling(max_indep - h_trunc), by = 1)
+      # size <- ceiling(max_indep - h_trunc) - l_trunc + 1
+      points.use <- seq(l_trunc, ceiling(max_indep - h_trunc), by=points.by)
+
+      size <- length(points.use)
       band <- c()
       for (count in 1:size) {
         num_points <- points.use[count]
@@ -397,8 +465,13 @@ bootstrapCI <- function (dataFrame,
         if (is.na(width.place[[i]][2])) {
           width.place[[i]][2] <- max_indep
         }
-        points.use = seq(l_trunc, ceiling(max_indep - h_trunc), by = 1)
-        size <- ceiling(max_indep - h_trunc) - l_trunc + 1
+
+        # Sep-2017 Update: change points.use to accommodate non-integer time grid
+        # prior to v1.0.0, points.use assumes integer values
+        # points.use = seq(l_trunc, ceiling(max_indep - h_trunc), by = 1)
+        # size <- ceiling(max_indep - h_trunc) - l_trunc + 1
+        points.use = seq(l_trunc, ceiling(max_indep - h_trunc), by=points.by)
+        size <- length(points.use)
         band <- c()
         for (count in 1:size) {
           if (abs(width.range[[i]][1] - width.range[[i]][2]) <
@@ -424,19 +497,21 @@ bootstrapCI <- function (dataFrame,
                             bandwidth = band,
                             deriv = (funcVar[j] - 1),
                             n.out = size,
-                            x.out = seq(l_trunc, (ceiling(max_indep) - h_trunc)),
+                            x.out = points.use,
                             order = funcVar[j], var = FALSE)$est
           smoothedCurves2[[k]][[i]][[j]] <- tempFunc
         }
       }
     }
-    max.len <- (ceiling(limit) - h_trunc) - l_trunc + 1
+    # Sep-2017 update: max_len is always calculated by points.by
+    max_len <- length(seq(l_trunc, ceiling(limit) - h_trunc, by=points.by))
+
     meanMatrix <- list()
     for (i in 1:num_depVar) {
       forEachDepMean <- list()
       for (j in 1:num_funcVar) {
-        forEachDerivMean <- rep(NA, max.len)
-        for (m in 1:max.len) {
+        forEachDerivMean <- rep(NA, max_len)
+        for (m in 1:max_len) {
           for (n in 1:length(vecSample)) {
             if (n == 1) {
               total <- 1
@@ -458,7 +533,7 @@ bootstrapCI <- function (dataFrame,
       dim <- num_depVar * num_funcVar
       cov.lag.mtx.listz <- list()
       weights.vec <- rep(NA, length(vecSample))
-      time.extend <- (l_trunc + max.len - 1) +
+      time.extend <- (l_trunc + max_len - 1) +
         l_trunc
       for (i in 1:length(vecSample)) {
         cov.lag.mtx.listz[[i]] <- list()
@@ -471,14 +546,14 @@ bootstrapCI <- function (dataFrame,
           dep.correct.function <- list()
           for (n in 1:num_funcVar) {
             dep.correct.function[[n]] <-
-              smoothedCurves2[[i]][[m]][[n]][1:max.len] - meanMatrix[[m]][[n]]
+              smoothedCurves2[[i]][[m]][[n]][1:max_len] - meanMatrix[[m]][[n]]
           }
           dep.correct[[m]] <- dep.correct.function
         }
         cov.lag.mtx.listz[[i]] <- matrix(nrow = dim, ncol = dim)
         diag(cov.lag.mtx.listz[[i]]) <- 1
         if (max.dynCorrLag >= 0) {
-          lag.end <- max.len - max.dynCorrLag
+          lag.end <- max_len - max.dynCorrLag
           lag.beg <- 1 + max.dynCorrLag
           m.support <- lag.end
           if (length(byOrder) == 0) {
@@ -493,10 +568,10 @@ bootstrapCI <- function (dataFrame,
               if (dim >= 2) {
                 dep <- (index - 1)%/%num_funcVar + 1
                 deriv <- (index - 1)%%num_funcVar + 1
-                mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max.len])
-                sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max.len]))
+                mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max_len])
+                sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max_len]))
                 correst.standz[[index]] <-
-                  (dep.correct[[dep]][[deriv]][lag.beg:max.len] - mean)/
+                  (dep.correct[[dep]][[deriv]][lag.beg:max_len] - mean)/
                   (sqrt((m.support - 1)/m.support) * sd)
                 cov.lag.mtx.listz[[i]][1, index] <-
                   cov.lag.mtx.listz[[i]][index, 1] <-
@@ -539,10 +614,10 @@ bootstrapCI <- function (dataFrame,
                   1
                 deriv <- (index - 1)%%num_funcVar +
                   1
-                mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max.len])
-                sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max.len]))
+                mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max_len])
+                sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max_len]))
                 correst.standz[[index]] <-
-                  (dep.correct[[dep]][[deriv]][lag.beg:max.len] - mean)/
+                  (dep.correct[[dep]][[deriv]][lag.beg:max_len] - mean)/
                   (sqrt((m.support - 1)/m.support) * sd)
                 cov.lag.mtx.listz[[i]][byOrder[1], index] <-
                   cov.lag.mtx.listz[[i]][index, byOrder[1]] <-
@@ -572,16 +647,16 @@ bootstrapCI <- function (dataFrame,
           }
         }
         else if (max.dynCorrLag < 0) {
-          lag.end <- max.len + max.dynCorrLag
+          lag.end <- max_len + max.dynCorrLag
           lag.beg <- 1 - max.dynCorrLag
           m.support <- lag.end
           if (length(byOrder) == 0) {
             correst.standz <- list()
             index <- 1
-            mean <- mean(dep.correct[[1]][[1]][lag.beg:max.len])
-            sd <- sqrt(var(dep.correct[[1]][[1]][lag.beg:max.len]))
+            mean <- mean(dep.correct[[1]][[1]][lag.beg:max_len])
+            sd <- sqrt(var(dep.correct[[1]][[1]][lag.beg:max_len]))
             correst.standz[[index]] <-
-              (dep.correct[[1]][[1]][lag.beg:max.len] - mean)/
+              (dep.correct[[1]][[1]][lag.beg:max_len] - mean)/
               (sqrt((m.support - 1)/m.support) * sd)
             for (index in 2:dim) {
               if (dim >= 2) {
@@ -602,10 +677,10 @@ bootstrapCI <- function (dataFrame,
               if (dim >= 3) {
                 dep <- (d - 1)%/%num_funcVar + 1
                 deriv <- (d - 1)%%num_funcVar + 1
-                mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max.len])
-                sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max.len]))
+                mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max_len])
+                sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max_len]))
                 correst.standz[[d]] <-
-                  (dep.correct[[dep]][[deriv]][lag.beg:max.len] -  mean)/
+                  (dep.correct[[dep]][[deriv]][lag.beg:max_len] -  mean)/
                   (sqrt((m.support - 1)/m.support) * sd)
                 for (e in (d + 1):dim) {
                   cov.lag.mtx.listz[[i]][d, e] <-
@@ -621,10 +696,10 @@ bootstrapCI <- function (dataFrame,
             index <- byOrder[1]
             dep <- (index - 1)%/%num_funcVar + 1
             deriv <- (index - 1)%%num_funcVar + 1
-            mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max.len])
-            sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max.len]))
+            mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max_len])
+            sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max_len]))
             correst.standz[[index]] <-
-              (dep.correct[[dep]][[deriv]][lag.beg:max.len] - mean)/
+              (dep.correct[[dep]][[deriv]][lag.beg:max_len] - mean)/
               (sqrt((m.support - 1)/m.support) * sd)
             for (ord in 2:dim) {
               index <- byOrder[ord]
@@ -649,10 +724,10 @@ bootstrapCI <- function (dataFrame,
                 d <- byOrder[ord]
                 dep <- (d - 1)%/%num_funcVar + 1
                 deriv <- (d - 1)%%num_funcVar + 1
-                mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max.len])
-                sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max.len]))
+                mean <- mean(dep.correct[[dep]][[deriv]][lag.beg:max_len])
+                sd <- sqrt(var(dep.correct[[dep]][[deriv]][lag.beg:max_len]))
                 correst.standz[[d]] <-
-                  (dep.correct[[dep]][[deriv]][lag.beg:max.len] - mean)/
+                  (dep.correct[[dep]][[deriv]][lag.beg:max_len] - mean)/
                   (sqrt((m.support - 1)/m.support) * sd)
                 for (ord2 in (ord + 1):dim) {
                   e <- byOrder[ord2]
@@ -686,7 +761,7 @@ bootstrapCI <- function (dataFrame,
     }
     else {
       weights.vec <- rep(NA, length(vecSample))
-      time.extend <- (l_trunc + max.len - 1) +
+      time.extend <- (l_trunc + max_len - 1) +
         l_trunc
       cov.lag.mtx.listz <- vector(mode = "list", num_vec)
       dim <- num_depVar
@@ -701,7 +776,7 @@ bootstrapCI <- function (dataFrame,
           dep.correct.function <- list()
           for (n in 1:num_funcVar) {
             dep.correct.function[[n]] <-
-              smoothedCurves2[[i]][[m]][[n]][1:max.len] -  meanMatrix[[m]][[n]]
+              smoothedCurves2[[i]][[m]][[n]][1:max_len] -  meanMatrix[[m]][[n]]
           }
           dep.correct[[m]] <- dep.correct.function
         }
@@ -709,7 +784,7 @@ bootstrapCI <- function (dataFrame,
           cov.lag.mtx.listz[[i]][[deriv]] <- matrix(nrow = dim, ncol = dim)
           diag(cov.lag.mtx.listz[[i]][[deriv]]) <- 1
           if (max.dynCorrLag >= 0) {
-            lag.end <- max.len - max.dynCorrLag
+            lag.end <- max_len - max.dynCorrLag
             lag.beg <- 1 + max.dynCorrLag
             m.support <- lag.end
             if (length(byOrder) == 0) {
@@ -722,10 +797,10 @@ bootstrapCI <- function (dataFrame,
                 (sqrt((m.support - 1)/m.support) * sd)
               for (index in 2:dim) {
                 if (dim >= 2) {
-                  mean <- mean(dep.correct[[index]][[deriv]][lag.beg:max.len])
-                  sd <- sqrt(var(dep.correct[[index]][[deriv]][lag.beg:max.len]))
+                  mean <- mean(dep.correct[[index]][[deriv]][lag.beg:max_len])
+                  sd <- sqrt(var(dep.correct[[index]][[deriv]][lag.beg:max_len]))
                   correst.standz[[index]] <-
-                    (dep.correct[[index]][[deriv]][lag.beg:max.len] - mean)/
+                    (dep.correct[[index]][[deriv]][lag.beg:max_len] - mean)/
                     (sqrt((m.support - 1)/m.support) * sd)
                   cov.lag.mtx.listz[[i]][[deriv]][1, index] <-
                     cov.lag.mtx.listz[[i]][[deriv]][index, 1] <-
@@ -770,10 +845,10 @@ bootstrapCI <- function (dataFrame,
               for (ord in 2:dim) {
                 if (dim >= 2) {
                   index <- byOrderPerD[ord]
-                  mean <- mean(dep.correct[[index]][[deriv]][lag.beg:max.len])
-                  sd <- sqrt(var(dep.correct[[index]][[deriv]][lag.beg:max.len]))
+                  mean <- mean(dep.correct[[index]][[deriv]][lag.beg:max_len])
+                  sd <- sqrt(var(dep.correct[[index]][[deriv]][lag.beg:max_len]))
                   correst.standz[[index]] <-
-                    (dep.correct[[index]][[deriv]][lag.beg:max.len] - mean)/
+                    (dep.correct[[index]][[deriv]][lag.beg:max_len] - mean)/
                     (sqrt((m.support - 1)/m.support) * sd)
                   cov.lag.mtx.listz[[i]][[deriv]][byOrderPerD[1], index] <-
                     cov.lag.mtx.listz[[i]][[deriv]][index, byOrderPerD[1]] <-
@@ -799,19 +874,19 @@ bootstrapCI <- function (dataFrame,
                   }
                 }
               }
-            }
+              }
           }
           else if (max.dynCorrLag < 0) {
-            lag.end <- max.len + max.dynCorrLag
+            lag.end <- max_len + max.dynCorrLag
             lag.beg <- 1 - max.dynCorrLag
             m.support <- lag.end
             if (length(byOrder) == 0) {
               correst.standz <- list()
               index <- 1
-              mean <- mean(dep.correct[[index]][[deriv]][lag.beg:max.len])
-              sd <- sqrt(var(dep.correct[[index]][[deriv]][lag.beg:max.len]))
+              mean <- mean(dep.correct[[index]][[deriv]][lag.beg:max_len])
+              sd <- sqrt(var(dep.correct[[index]][[deriv]][lag.beg:max_len]))
               correst.standz[[index]] <-
-                (dep.correct[[index]][[deriv]][lag.beg:max.len] - mean)/
+                (dep.correct[[index]][[deriv]][lag.beg:max_len] - mean)/
                 (sqrt((m.support - 1)/m.support) * sd)
               for (index in 2:dim) {
                 if (dim >= 2) {
@@ -828,10 +903,10 @@ bootstrapCI <- function (dataFrame,
               }
               for (d in 2:(dim - 1)) {
                 if (dim >= 3) {
-                  mean <- mean(dep.correct[[d]][[deriv]][lag.beg:max.len])
-                  sd <- sqrt(var(dep.correct[[d]][[deriv]][lag.beg:max.len]))
+                  mean <- mean(dep.correct[[d]][[deriv]][lag.beg:max_len])
+                  sd <- sqrt(var(dep.correct[[d]][[deriv]][lag.beg:max_len]))
                   correst.standz[[d]] <-
-                    (dep.correct[[d]][[deriv]][lag.beg:max.len] - mean)/
+                    (dep.correct[[d]][[deriv]][lag.beg:max_len] - mean)/
                     (sqrt((m.support - 1)/m.support) * sd)
                   for (e in (d + 1):dim) {
                     cov.lag.mtx.listz[[i]][[deriv]][d, e] <-
@@ -859,10 +934,10 @@ bootstrapCI <- function (dataFrame,
               }
               correst.standz <- list()
               index <- byOrderPerD[1]
-              mean <- mean(dep.correct[[index]][[deriv]][lag.beg:max.len])
-              sd <- sqrt(var(dep.correct[[index]][[deriv]][lag.beg:max.len]))
+              mean <- mean(dep.correct[[index]][[deriv]][lag.beg:max_len])
+              sd <- sqrt(var(dep.correct[[index]][[deriv]][lag.beg:max_len]))
               correst.standz[[index]] <-
-                (dep.correct[[index]][[deriv]][lag.beg:max.len] - mean)/
+                (dep.correct[[index]][[deriv]][lag.beg:max_len] - mean)/
                 (sqrt((m.support - 1)/m.support) * sd)
               for (ord in 2:dim) {
                 index <- byOrderPerD[ord]
@@ -881,10 +956,10 @@ bootstrapCI <- function (dataFrame,
               for (ord in 2:(dim - 1)) {
                 if (dim >= 3) {
                   d <- byOrderPerD[ord]
-                  mean <- mean(dep.correct[[d]][[deriv]][lag.beg:max.len])
-                  sd <- sqrt(var(dep.correct[[d]][[deriv]][lag.beg:max.len]))
+                  mean <- mean(dep.correct[[d]][[deriv]][lag.beg:max_len])
+                  sd <- sqrt(var(dep.correct[[d]][[deriv]][lag.beg:max_len]))
                   correst.standz[[d]] <-
-                    (dep.correct[[d]][[deriv]][lag.beg:max.len] - mean)/
+                    (dep.correct[[d]][[deriv]][lag.beg:max_len] - mean)/
                     (sqrt((m.support - 1)/m.support) * sd)
                   for (ord2 in (ord + 1):dim) {
                     e <- byOrderPerD[ord2]
@@ -895,7 +970,7 @@ bootstrapCI <- function (dataFrame,
                   }
                 }
               }
-            }
+              }
           }
         }
       }
@@ -944,6 +1019,23 @@ bootstrapCI <- function (dataFrame,
     }
   }
   mean.cov.wgt.mtx.B
+
+  # add Sep-2017 result for cor est
+  corr.est <- dynamicCorrelation(dataFrame = dataFrame,
+                                 depVar = depVar,
+                                 indepVar = indepVar,
+                                 subjectVar = subjectVar,
+                                 function.choice = function.choice,
+                                 width.range = width.range,
+                                 width.place = width.place,
+                                 min.obs = min.obs,
+                                 points.by = points.by,
+                                 points.length = points.length,
+                                 boundary.trunc = boundary.trunc,
+                                 lag.input = max.dynCorrLag,
+                                 byOrder = byOrder,
+                                 by.deriv.only = by.deriv.only)
+
   if (by.deriv.only == FALSE) {
     dim <- num_depVar * num_funcVar
     corr <- vector(mode = "list", dim)
@@ -956,7 +1048,7 @@ bootstrapCI <- function (dataFrame,
         }
       }
     }
-    CI <- matrix(0, dim * (dim - 1)/2, 5)
+    CI <- matrix(0, dim * (dim - 1)/2, 6)
     count <- 1
     namesRow <- c()
     for (i in 1:dim) {
@@ -967,15 +1059,18 @@ bootstrapCI <- function (dataFrame,
           colVar <- (j - 1)%/%num_funcVar + 1
           colDer <- (j - 1)%%num_funcVar + 1
           temp <- quantile(corr[[i]][[j]], percentile)
-          CI[count, 3] <- round(temp[[1]], 4)
-          CI[count, 4] <- round(temp[[2]], 4)
+          CI[count, 4] <- round(temp[[1]], 4)
+          CI[count, 5] <- round(temp[[2]], 4)
+
+          # add Sep-2017 cor.est
+          CI[count, 3] <- round(corr.est$dynCorrMatrix[i,j], 4)
           CI[count, 2] <- max.dynCorrLag
           CI[count, 1] <- " "
           if (mean.cov.wgt.mtx.B[i, j] > 0) {
-            CI[count, 5] <- round(2 * sum(corr[[i]][[j]] <= 0)/B, 5)
+            CI[count, 6] <- round(2 * sum(corr[[i]][[j]] <= 0)/B, 5)
           }
           else {
-            CI[count, 5] <- round(2 * sum(corr[[i]][[j]] >= 0)/B, 5)
+            CI[count, 6] <- round(2 * sum(corr[[i]][[j]] >= 0)/B, 5)
           }
           count <- count + 1
           name <- paste(depVar[rowVar], funcVar[rowDer] - 1,
@@ -986,14 +1081,17 @@ bootstrapCI <- function (dataFrame,
     }
     perc1 <- paste(percentile[1] * 100, "%")
     perc2 <- paste(percentile[2] * 100, "%")
-    namesCol <- c(" ", "lag", perc1, perc2, "BS p-value")
+    namesCol <- c(" ", "lag", "dCorr.est", perc1, perc2, "BS p-value")
     dimnames(CI) <- list(namesRow, namesCol)
     CI <- as.data.frame(CI)
-    return(list(quantilesMatrix = CI))
+    return(list(quantilesMatrix = CI,
+                # added Nov-2017 include data summary
+                data.summary = data_summary))
   }
   else {
     dim <- num_depVar
     corr <- vector(mode = "list", num_funcVar)
+
     for (deriv in 1:num_funcVar) {
       corr[[deriv]] <- vector(mode = "list", dim)
       for (i in 1:dim) {
@@ -1010,9 +1108,9 @@ bootstrapCI <- function (dataFrame,
     CI <- vector(mode = "list", num_funcVar)
     perc1 <- paste(percentile[1] * 100, "%")
     perc2 <- paste(percentile[2] * 100, "%")
-    namesCol <- c(" ", "lag", perc1, perc2, "BS p-value")
+    namesCol <- c(" ", "lag", "dCorr.est", perc1, perc2, "BS p-value")
     for (deriv in 1:num_funcVar) {
-      CI[[deriv]] <- matrix(0, dim * (dim - 1)/2, 5)
+      CI[[deriv]] <- matrix(0, dim * (dim - 1)/2, 6)
       count <- 1
       namesRow <- c()
       for (i in 1:dim) {
@@ -1020,16 +1118,18 @@ bootstrapCI <- function (dataFrame,
           if (dim >= (i + 1)) {
             temp <- quantile(corr[[deriv]][[i]][[j]],
                              percentile)
-            CI[[deriv]][count, 3] <- round(temp[[1]], 4)
-            CI[[deriv]][count, 4] <- round(temp[[2]], 4)
+            CI[[deriv]][count, 4] <- round(temp[[1]], 4)
+            CI[[deriv]][count, 5] <- round(temp[[2]], 4)
+            # add dyn Corr result - Sep 2017
+            CI[[deriv]][count, 3] <- round(corr.est$dynCorrMatrix[[deriv]][i, j],4)
             CI[[deriv]][count, 2] <- max.dynCorrLag
             CI[[deriv]][count, 1] <- " "
             if (mean.cov.wgt.mtx.B[[deriv]][i, j] > 0) {
-              CI[[deriv]][count, 5] <-
+              CI[[deriv]][count, 6] <-
                 round(2 * sum(corr[[deriv]][[i]][[j]] <= 0)/B, 5)
             }
             else {
-              CI[[deriv]][count, 5] <-
+              CI[[deriv]][count, 6] <-
                 round(2 * sum(corr[[deriv]][[i]][[j]] >= 0)/B, 5)
             }
             count <- count + 1
@@ -1042,6 +1142,8 @@ bootstrapCI <- function (dataFrame,
       dimnames(CI[[deriv]]) <- list(namesRow, namesCol)
       CI[[deriv]] <- as.data.frame(CI[[deriv]])
     }
-    return(list(quantilesMatrix = CI))
+    return(list(quantilesMatrix = CI,
+                # added Nov-2017 include data summary
+                data.summary = data_summary))
   }
-}
+  }

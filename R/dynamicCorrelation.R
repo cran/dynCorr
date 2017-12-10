@@ -7,8 +7,8 @@
 #' @usage
 #' dynamicCorrelation(dataFrame, depVar, indepVar, subjectVar,
 #'                    function.choice, width.range, width.place,
-#'                    boundary.trunc, lag.input, byOrder,
-#'                    by.deriv.only, full.lag.output)
+#'                    min.obs, points.length, points.by, boundary.trunc,
+#'                    lag.input, byOrder, by.deriv.only, full.lag.output)
 #'
 #' @param dataFrame The data frame that contains the dependent
 #'  variables/responses, the independent variable (often time),
@@ -61,6 +61,26 @@
 #'  used for each of the responses; default is no endpoints specified
 #'  which means constant global bandwidth throughout the range of indepVar.
 #'
+#' @param min.obs Minimum oberservation (follow-up period) required.
+#'  If specified, individuals whose follow-up period shorter than min.obs will
+#'  be removed from calculation. Default = NA (use whole dataset provided).
+#'
+#' @param points.length Number of indep (time) points for dynamic correlation 
+#'  calculation for each response of each individual. This is the number of 
+#'  points between time 0 and minimum of maximum of individual follow-up 
+#'  periods (max_common_obs). Note that each individual’s full follow-up 
+#'  time span is used in the local polynomial regression curve smoothing 
+#'  step, but only the first points.length number of time points (from time 0 
+#'  to max_common_obs) is used in the following dynamic correlation calculation. 
+#'  Default points.length value is set to 100; points.length takes precedence 
+#'  unless points.by is specified.
+#'
+#' @param points.by Interval between indep (time) points for local polynomial
+#'  regression curve smoothing for each response of each individual.
+#'  Both integer and non-integer value could be specified, and time grid will
+#'  be computed accordingly. Note that points.length takes precedence
+#'  (default = 100) unless points.by is specified.
+#'
 #' @param boundary.trunc Indicate the boundary of indepVar that should be
 #'  truncated after smoothing; this may be done in case of concerns about
 #'  estimating dynamical correlation at the boundaries of indepVar; this
@@ -76,7 +96,7 @@
 #' of lag.input means that the first entry for the dynamical correlation
 #' leads (occurs before) the second entry — conversely, a negative value
 #' means that the second entry for the correlation leads the first entry;
-#' default is no lag at all considered
+#' default is no lag at all considered.
 #'
 #' @param byOrder A vector that specifies the order of the
 #'  variables/responses and derivatives (if any) to be the leading
@@ -89,13 +109,13 @@
 #' computation time (e.g., when function.choice=c(1,0,1) is specified
 #' and by.deriv.only=T, then only dynamical correlations will be
 #' calculated within (and not across) the 0th and 2nd derivative
-#' estimates, respectively); default is TRUE
+#' estimates, respectively); default is TRUE.
 #'
 #' @param full.lag.output If TRUE, the dynamical correlation values
 #' for each pair of responses and requested derivative will be stored
 #' in vectors corresponding to different lag values, which enables
 #' plotting the correlations as a function of lag values; all the vectors
-#' will be stored in the returned attribute resultMatrix; default is FALSE
+#' will be stored in the returned attribute resultMatrix; default is FALSE.
 #'
 #' @details This function will provide smooth estimates (curves/functions
 #'  or their derivatives) of longitudinal responses of interest per
@@ -108,7 +128,10 @@
 #'  will be a constant global bandwidth, but proper specification of the
 #'  width.range and width.place arguments can allow for a more flexible
 #'  bandwidth choice, including different specification for each response
-#'  in depVar. \cr \cr
+#'  in depVar. Note that the correlation will only be calculated as far as 
+#'  min of max observation time (max_common_obs) across all individuals, 
+#'  by default, hence caution should be taken if there is large heterogeneity 
+#'  among max observation times across individuals. \cr \cr
 #'  Details of the methodology for dynamical correlation can be found in
 #'  Dubin and Muller (2005).
 #'
@@ -118,26 +141,52 @@
 #'
 #' ## Example 1: using default smoothing parameters, obtain dynamical
 #' ##            correlation estimates for all three pairs of responses,
-#' ##            for both original function and the first derivative
+#' ##            for both original function and the first derivative.
+#' ##            Note that in dynCorrData, mininum of maximum obs. time
+#' ##            = 120, results should be the same if either points.by
+#' ##            = 1 or points.length = 120 is specified.
 #'
-#' examp1 <- dynamicCorrelation(dataFrame=dynCorrData,
-#'                              depVar=c('resp1', 'resp2', 'resp3'),
-#'                              indepVar='time',
-#'                              subjectVar = 'subject',
-#'                              function.choice = c(1,1,0))
-#' examp1
+#' examp1_by <- dynamicCorrelation(dataFrame = dynCorrData,
+#'                                 depVar = c('resp1', 'resp2', 'resp3'),
+#'                                 indepVar = 'time',
+#'                                 points.by = 1,
+#'                                 subjectVar = 'subject',
+#'                                 function.choice = c(1,1,0))
+#'
+#' examp1_len <- dynamicCorrelation(dataFrame = dynCorrData,
+#'                                  depVar = c('resp1', 'resp2', 'resp3'),
+#'                                  indepVar = 'time',
+#'                                  points.length = 120,
+#'                                  subjectVar = 'subject',
+#'                                  function.choice = c(1,1,0))
+#' examp1_by
+#' examp1_len
+#'
+#' ## Example 1a: re-run Example 1 using original dataset, but with min.obs
+#' ##             set to 200. Range in lengths of follow-up periods between
+#' ##             individuals is reduced.
+#'
+#' examp1a <- dynamicCorrelation(dataFrame = dynCorrData,
+#'                               depVar = c('resp1', 'resp2', 'resp3'),
+#'                               indepVar = 'time',
+#'                               min.obs = 150,
+#'                               points.by = 1,
+#'                               subjectVar = 'subject',
+#'                               function.choice = c(1,0,0))
+#' examp1a
 #'
 #' ## Example 2: using default smoothing parameters, obtain dynamical
 #' ##            correlation estimates for all three pairs of responses,
 #' ##            looking at range of lags between -10 and +10, for original
 #' ##            functions only
 #'
-#' examp2 <- dynamicCorrelation(dataFrame=dynCorrData,
-#'                              depVar=c('resp1', 'resp2', 'resp3'),
-#'                              indepVar='time',
+#' examp2 <- dynamicCorrelation(dataFrame = dynCorrData,
+#'                              depVar = c('resp1', 'resp2', 'resp3'),
+#'                              indepVar = 'time',
+#'                              points.by = 1,
 #'                              subjectVar = 'subject',
 #'                              function.choice = c(1,0,0),
-#'                              lag.input=seq(-20,20, by=1))
+#'                              lag.input = seq(-20,20, by=1))
 #' examp2
 #'
 #' ## note: output includes zero lag correlations, as well as maximum
@@ -147,13 +196,14 @@
 #' ## Example 3: re-rerun example 2, but set up for plotting of specified
 #' ##            lagged correlations
 #'
-#' examp3 <- dynamicCorrelation(dataFrame=dynCorrData,
-#'                              depVar=c('resp1', 'resp2', 'resp3'),
-#'                              indepVar='time',
+#' examp3 <- dynamicCorrelation(dataFrame = dynCorrData,
+#'                              depVar = c('resp1', 'resp2', 'resp3'),
+#'                              indepVar = 'time',
 #'                              subjectVar = 'subject',
+#'                              points.by = 1,
 #'                              function.choice = c(1,0,0),
-#'                              lag.input=seq(-20,10, by=1),
-#'                              full.lag.output=TRUE)
+#'                              lag.input = seq(-20,10, by=1),
+#'                              full.lag.output = TRUE)
 #'
 #' # conduct plotting, with one panel for each pair of responses considered;
 #' # the ylim adjustment is made here for the different magnitude of the
@@ -184,9 +234,10 @@
 #' ##            except now adjust the constant global bandwidth
 #' ##            from the default to 40
 #'
-#' examp4 <- dynamicCorrelation(dataFrame=dynCorrData,
-#'                              depVar=c('resp1', 'resp2', 'resp3'),
-#'                              indepVar='time',
+#' examp4 <- dynamicCorrelation(dataFrame = dynCorrData,
+#'                              depVar = c('resp1', 'resp2', 'resp3'),
+#'                              indepVar = 'time',
+#'                              points.by = 1,
 #'                              subjectVar = 'subject',
 #'                              function.choice = c(1,0,0),
 #'                              width.range = c(40, 40))
@@ -208,6 +259,9 @@ dynamicCorrelation <- function (dataFrame,
                                                 ((range(dataFrame[[indepVar]]))[2] -
                                                    (range(dataFrame[[indepVar]]))[1])/4),
                                 width.place = c(NA, NA),
+                                min.obs = NA,
+                                points.length = 100,
+                                points.by = NA,
                                 boundary.trunc = c(0, 0),
                                 lag.input = c(),
                                 byOrder = c(),
@@ -217,6 +271,28 @@ dynamicCorrelation <- function (dataFrame,
 
   ## --------------------Set up -------------------
 
+  # Nov-2017 Introduce new parametew min.obs (modify dataset if min.obs
+  # is specified)
+  if (!is.na(min.obs)) {
+    vec <- unique(dataFrame[[subjectVar]]) # list of individuals id
+    dep_var = dataFrame[depVar]
+    subject_var = dataFrame[[subjectVar]]
+    indep_var = dataFrame[[indepVar]]
+
+    to_remove <- c()
+    for (i in 1:length(vec)) {
+      ind_time <-max(indep_var[subject_var == vec[i]])
+      if (ind_time < min.obs) {
+        to_remove <- c(to_remove, vec[i])
+      }
+    }
+    
+    for (i in 1:length(to_remove)) {
+      dataFrame <- dataFrame[subject_var!=to_remove[i],]
+      subject_var <-subject_var[subject_var!=to_remove[i]]
+      indep_var <- indep_var[subject_var!=to_remove[i]]
+    }
+  }
   vec <- unique(dataFrame[[subjectVar]]) # list of individuals id
   dep_var = dataFrame[depVar]
   subject_var = dataFrame[[subjectVar]]
@@ -276,7 +352,19 @@ dynamicCorrelation <- function (dataFrame,
   }
   limit <- min(v_ob_time) # max common obs
 
-
+  # Sep 2017 - calculate points.by if it is not specified
+  if (is.na(points.by)) {
+    points.by <- limit/points.length
+  }
+  
+  # Nov 2017 - add output table
+  max_limit <- max(v_ob_time)
+  base <- min(indep_var[subject_var == vec[1]])
+  max_limit <- max_limit - base
+  min_max_limit <- limit - base
+  n <- length(vec)
+  data_summary <- matrix(c(n,min_max_limit,max_limit), ncol=3, byrow=TRUE)
+  colnames(data_summary) <- c('sample.size','min.max.time','max.max.time')
 
   ## ------------ Smooth Curves -----------------------
 
@@ -300,10 +388,14 @@ dynamicCorrelation <- function (dataFrame,
         cur_wplace[2] <- max_indep
       }
 
-      points.use = seq(l_trunc, ceiling(max_indep - h_trunc), by = 1)
-      size <- ceiling(max_indep - h_trunc) - l_trunc + 1
-      band <- c()
+      # Aug-2017 Update: change points.use to accommodate non-integer time grid
+      # prior to v1.0.0, points.use assumes integer values
+      # points.use = seq(l_trunc, ceiling(max_indep - h_trunc), by = 1)
+      # size <- ceiling(max_indep - h_trunc) - l_trunc + 1
+      points.use <- seq(l_trunc, ceiling(max_indep - h_trunc), by=points.by)
 
+      size <- length(points.use)
+      band <- c()
       # calculate band width
       for (count in 1:size) {
         num_points <- points.use[count]
@@ -338,7 +430,9 @@ dynamicCorrelation <- function (dataFrame,
     }
   }
 
-  max_len <- (ceiling(limit) - h_trunc) - l_trunc + 1
+  # Sep-2017 update: max_len is calculated using points.by
+
+  max_len <- length(seq(l_trunc, ceiling(limit) - h_trunc, by=points.by))
   meanMatrix <- vector(mode = "list", num_depVar)
 
   # calculate mean matrix
@@ -466,7 +560,8 @@ dynamicCorrelation <- function (dataFrame,
     }
     dimnames(cov.wgt.mtxz) <- list(names, names)
   }
-
+  
+  # added Nov-2017 Data summary table
   cov.wgt.mtxz
 
   if (length(lag.input) != 0) {
@@ -768,7 +863,7 @@ dynamicCorrelation <- function (dataFrame,
                     }
                   }
                 }
-              }
+                }
             }
             else if (lag.input[j] < 0) {
               lag_end <- max_len + lag.input[j]
@@ -860,7 +955,7 @@ dynamicCorrelation <- function (dataFrame,
                     }
                   }
                 }
-              }
+                }
             }
           }
         }
@@ -919,18 +1014,24 @@ dynamicCorrelation <- function (dataFrame,
   if (by.deriv.only == FALSE) {
     if (full.lag.output == FALSE) {
       if (length(lag.input) == 0) {
-        return(list(dynCorrMatrix = cov.wgt.mtxz))
+        return(list(dynCorrMatrix = cov.wgt.mtxz,
+                    # added Nov-2017 include data summary
+                    data.summary = data_summary))
       }
       else {
         return(list(dynCorrMatrix = cov.wgt.mtxz,
                     lag.input = lag.input,
                     max.dynCorr = cov.lag.wgt.mtxz,
-                    max.dynCorrLag = lag.max.cov.mtxz))
+                    max.dynCorrLag = lag.max.cov.mtxz,
+                    # added Nov-2017 include data summary
+                    data.summary = data_summary))
       }
     }
     else {
       if (length(lag.input) == 0) {
-        return(list(dynCorrMatrix = cov.wgt.mtxz))
+        return(list(dynCorrMatrix = cov.wgt.mtxz,
+                    # added Nov-2017 include data summary
+                    data.summary = data_summary))
       }
       else {
         dim <- num_depVar * num_funcVar
@@ -967,25 +1068,33 @@ dynamicCorrelation <- function (dataFrame,
                     lag.input = lag.input,
                     lagResultMatrix = result,
                     max.dynCorr = cov.lag.wgt.mtxz,
-                    max.dynCorrLag = lag.max.cov.mtxz))
+                    max.dynCorrLag = lag.max.cov.mtxz,
+                    # added Nov-2017 include data summary
+                    data.summary = data_summary))
       }
     }
   }
   else {
     if (full.lag.output == FALSE) {
       if (length(lag.input) == 0) {
-        return(list(dynCorrMatrix = cov.wgt.mtxz))
+        return(list(dynCorrMatrix = cov.wgt.mtxz,
+                    # added Nov-2017 include data summary
+                    data.summary = data_summary))
       }
       else {
         return(list(dynCorrMatrix = cov.wgt.mtxz,
                     lag.input = lag.input,
                     max.dynCorr = cov.lag.wgt.mtxz,
-                    max.dynCorrLag = lag.max.cov.mtxz))
+                    max.dynCorrLag = lag.max.cov.mtxz,
+                    # added Nov-2017 include data summary
+                    data.summary = data_summary))
       }
     }
     else {
       if (length(lag.input) == 0) {
-        return(list(dynCorrMatrix = cov.wgt.mtxz))
+        return(list(dynCorrMatrix = cov.wgt.mtxz,
+                    # added Nov-2017 include data summary
+                    data.summary = data_summary))
       }
       else {
         dim <- num_depVar
@@ -1019,8 +1128,10 @@ dynamicCorrelation <- function (dataFrame,
                     lag.input = lag.input,
                     lagResultMatrix = result,
                     max.dynCorr = cov.lag.wgt.mtxz,
-                    max.dynCorrLag = lag.max.cov.mtxz))
+                    max.dynCorrLag = lag.max.cov.mtxz,
+                    # added Nov-2017 include data summary
+                    data.summary = data_summary))
       }
     }
   }
-}
+  }

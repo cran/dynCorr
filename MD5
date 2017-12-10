@@ -1,11 +1,11 @@
-bea37e2ee87686cf5c035b070f73e60b *DESCRIPTION
+6f9b08110e0d51e4ac5f72c3bb103c78 *DESCRIPTION
 065c859eed4de4aa6fbe476ee8ba9eff *NAMESPACE
-dfcd4c56026e098fa2585657aba4fa54 *NEWS.md
-15a57285631710006196a1b7a22b712f *R/bootstrapCI.R
+a3bd4d931a501053d07e55a568a13e2c *NEWS.md
+ab90c33d4836474068e82b9ad1f618e3 *R/bootstrapCI.R
 b5f56613dedd133e0b0b2084522e9afb *R/data.R
-a8305f6fb20538bd0b43a9ef66fb0f5c *R/dynamicCorrelation.R
+ca766f9250fa2d1116f36c28af4bedc8 *R/dynamicCorrelation.R
 304fc0f9cd00c3ad8eb66fc4aa83b48f *README.md
 4d94b400b4a8a55e8fc210206f656f49 *data/dynCorrData.rda
-0581a48a94aa6b8518f7677c82b745c6 *man/bootstrapCI.Rd
+729ca03ef6a9d0d4d8beeb85592b7fd4 *man/bootstrapCI.Rd
 f5897675f29c58aaea49083addd73126 *man/dynCorrData.Rd
-6b166b7132e4a3f5b61b4f2d82e53fa4 *man/dynamicCorrelation.Rd
+2f31ea912c6d0b8c3ebfd3b77a24f20c *man/dynamicCorrelation.Rd

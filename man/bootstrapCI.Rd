@@ -5,8 +5,9 @@
 \title{Bootstrap Confidence Interval}
 \usage{
 bootstrapCI(dataFrame, depVar, indepVar, subjectVar, function.choice,
-            width.range, width.place, boundary.trunc, byOrder,
-            max.dynCorrLag, B, percentile, by.deriv.only, seed)
+            width.range, width.place, min.obs, points.length, points.by,
+            boundary.trunc, byOrder, max.dynCorrLag, B, percentile,
+            by.deriv.only, seed)
 }
 \arguments{
 \item{dataFrame}{The data frame that contains the dependent
@@ -59,6 +60,26 @@ to its second argument; it can be a list that specifies different
 endpoints for each response, or a single vector of endpoints that is
 used for each of the responses; default is no endpoints specified
 which means constant global bandwidth throughout the range of indepVar.}
+
+\item{min.obs}{Minimum oberservation (follow-up period) required.
+If specified, individuals whose follow-up period shorter than min.obs will
+be removed from calculation. Default = NA (use whole dataset provided).}
+
+\item{points.length}{Number of indep (time) points for dynamic correlation 
+calculation for each response of each individual. This is the number of 
+points between time 0 and minimum of maximum of individual follow-up 
+periods (max_common_obs). Note that each individual’s full follow-up 
+time span is used in the local polynomial regression curve smoothing 
+step, but only the first points.length number of time points (from time 0 
+to max_common_obs) is used in the following dynamic correlation calculation. 
+Default points.length value is set to 100; points.length takes precedence 
+unless points.by is specified.}
+
+\item{points.by}{Interval between indep (time) points for local polynomial
+regression curve smoothing for each response of each individual.
+Both integer and non-integer value could be specified, and time grid will
+be computed accordingly. Note that points.length takes precedence
+(default = 100) unless points.by is specified.}
 
 \item{boundary.trunc}{Indicate the boundary of indepVar that should be
 truncated after smoothing; this may be done in case of concerns about
@@ -137,12 +158,13 @@ This function will provide smooth estimates
 ##            function only. Note that B=200 or greater should be
 ##            considered for real data analysis.
 
-examp1.bs <- bootstrapCI(dataFrame=dynCorrData,
-                         depVar=c('resp1', 'resp2', 'resp3'),
-                         indepVar='time',
+examp1.bs <- bootstrapCI(dataFrame = dynCorrData,
+                         depVar = c('resp1', 'resp2', 'resp3'),
+                         indepVar = 'time',
                          subjectVar = 'subject',
+                         points.by = 1,
                          function.choice = c(1,0,0),
-                         B = 2, percentile=c(0.025, 0.975), seed = 5)
+                         B = 2, percentile = c(0.025, 0.975), seed = 5)
 examp1.bs
 
 ## Example 2: using default smoothing parameters, obtain bootstrap CI
@@ -151,12 +173,13 @@ examp1.bs
 ##            Note that B=200 or greater should be considered for real
 ##            data analysis.
 
-examp2.bs <- bootstrapCI(dataFrame=dynCorrData,
-                         depVar=c('resp1', 'resp2', 'resp3'),
-                         indepVar='time',
+examp2.bs <- bootstrapCI(dataFrame = dynCorrData,
+                         depVar = c('resp1', 'resp2', 'resp3'),
+                         indepVar = 'time',
                          subjectVar = 'subject',
+                         points.by = 1,
                          function.choice = c(1,0,0), max.dynCorrLag = -10,
-                         B = 2, percentile=c(0.01, 0.99), seed = 7)
+                         B = 2, percentile = c(0.01, 0.99), seed = 7)
 examp2.bs
 
 }

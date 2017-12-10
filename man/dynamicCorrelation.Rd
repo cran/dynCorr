@@ -6,8 +6,8 @@
 \usage{
 dynamicCorrelation(dataFrame, depVar, indepVar, subjectVar,
                    function.choice, width.range, width.place,
-                   boundary.trunc, lag.input, byOrder,
-                   by.deriv.only, full.lag.output)
+                   min.obs, points.length, points.by, boundary.trunc,
+                   lag.input, byOrder, by.deriv.only, full.lag.output)
 }
 \arguments{
 \item{dataFrame}{The data frame that contains the dependent
@@ -61,6 +61,26 @@ endpoints for each response, or a single vector of endpoints that is
 used for each of the responses; default is no endpoints specified
 which means constant global bandwidth throughout the range of indepVar.}
 
+\item{min.obs}{Minimum oberservation (follow-up period) required.
+If specified, individuals whose follow-up period shorter than min.obs will
+be removed from calculation. Default = NA (use whole dataset provided).}
+
+\item{points.length}{Number of indep (time) points for dynamic correlation 
+calculation for each response of each individual. This is the number of 
+points between time 0 and minimum of maximum of individual follow-up 
+periods (max_common_obs). Note that each individual’s full follow-up 
+time span is used in the local polynomial regression curve smoothing 
+step, but only the first points.length number of time points (from time 0 
+to max_common_obs) is used in the following dynamic correlation calculation. 
+Default points.length value is set to 100; points.length takes precedence 
+unless points.by is specified.}
+
+\item{points.by}{Interval between indep (time) points for local polynomial
+regression curve smoothing for each response of each individual.
+Both integer and non-integer value could be specified, and time grid will
+be computed accordingly. Note that points.length takes precedence
+(default = 100) unless points.by is specified.}
+
 \item{boundary.trunc}{Indicate the boundary of indepVar that should be
 truncated after smoothing; this may be done in case of concerns about
 estimating dynamical correlation at the boundaries of indepVar; this
@@ -76,7 +96,7 @@ produced for each pair of responses at each lag; a positive value
 of lag.input means that the first entry for the dynamical correlation
 leads (occurs before) the second entry — conversely, a negative value
 means that the second entry for the correlation leads the first entry;
-default is no lag at all considered}
+default is no lag at all considered.}
 
 \item{byOrder}{A vector that specifies the order of the
 variables/responses and derivatives (if any) to be the leading
@@ -89,13 +109,13 @@ between different derivatives are not computed, which can save
 computation time (e.g., when function.choice=c(1,0,1) is specified
 and by.deriv.only=T, then only dynamical correlations will be
 calculated within (and not across) the 0th and 2nd derivative
-estimates, respectively); default is TRUE}
+estimates, respectively); default is TRUE.}
 
 \item{full.lag.output}{If TRUE, the dynamical correlation values
 for each pair of responses and requested derivative will be stored
 in vectors corresponding to different lag values, which enables
 plotting the correlations as a function of lag values; all the vectors
-will be stored in the returned attribute resultMatrix; default is FALSE}
+will be stored in the returned attribute resultMatrix; default is FALSE.}
 }
 \description{
 Computes dynamical correlation estimates for pairs of longitudinal
@@ -114,7 +134,10 @@ This function will provide smooth estimates (curves/functions
  will be a constant global bandwidth, but proper specification of the
  width.range and width.place arguments can allow for a more flexible
  bandwidth choice, including different specification for each response
- in depVar. \cr \cr
+ in depVar. Note that the correlation will only be calculated as far as 
+ min of max observation time (max_common_obs) across all individuals, 
+ by default, hence caution should be taken if there is large heterogeneity 
+ among max observation times across individuals. \cr \cr
  Details of the methodology for dynamical correlation can be found in
  Dubin and Muller (2005).
 }
@@ -122,26 +145,52 @@ This function will provide smooth estimates (curves/functions
 
 ## Example 1: using default smoothing parameters, obtain dynamical
 ##            correlation estimates for all three pairs of responses,
-##            for both original function and the first derivative
+##            for both original function and the first derivative.
+##            Note that in dynCorrData, mininum of maximum obs. time
+##            = 120, results should be the same if either points.by
+##            = 1 or points.length = 120 is specified.
 
-examp1 <- dynamicCorrelation(dataFrame=dynCorrData,
-                             depVar=c('resp1', 'resp2', 'resp3'),
-                             indepVar='time',
-                             subjectVar = 'subject',
-                             function.choice = c(1,1,0))
-examp1
+examp1_by <- dynamicCorrelation(dataFrame = dynCorrData,
+                                depVar = c('resp1', 'resp2', 'resp3'),
+                                indepVar = 'time',
+                                points.by = 1,
+                                subjectVar = 'subject',
+                                function.choice = c(1,1,0))
+
+examp1_len <- dynamicCorrelation(dataFrame = dynCorrData,
+                                 depVar = c('resp1', 'resp2', 'resp3'),
+                                 indepVar = 'time',
+                                 points.length = 120,
+                                 subjectVar = 'subject',
+                                 function.choice = c(1,1,0))
+examp1_by
+examp1_len
+
+## Example 1a: re-run Example 1 using original dataset, but with min.obs
+##             set to 200. Range in lengths of follow-up periods between
+##             individuals is reduced.
+
+examp1a <- dynamicCorrelation(dataFrame = dynCorrData,
+                              depVar = c('resp1', 'resp2', 'resp3'),
+                              indepVar = 'time',
+                              min.obs = 150,
+                              points.by = 1,
+                              subjectVar = 'subject',
+                              function.choice = c(1,0,0))
+examp1a
 
 ## Example 2: using default smoothing parameters, obtain dynamical
 ##            correlation estimates for all three pairs of responses,
 ##            looking at range of lags between -10 and +10, for original
 ##            functions only
 
-examp2 <- dynamicCorrelation(dataFrame=dynCorrData,
-                             depVar=c('resp1', 'resp2', 'resp3'),
-                             indepVar='time',
+examp2 <- dynamicCorrelation(dataFrame = dynCorrData,
+                             depVar = c('resp1', 'resp2', 'resp3'),
+                             indepVar = 'time',
+                             points.by = 1,
                              subjectVar = 'subject',
                              function.choice = c(1,0,0),
-                             lag.input=seq(-20,20, by=1))
+                             lag.input = seq(-20,20, by=1))
 examp2
 
 ## note: output includes zero lag correlations, as well as maximum
@@ -151,13 +200,14 @@ examp2
 ## Example 3: re-rerun example 2, but set up for plotting of specified
 ##            lagged correlations
 
-examp3 <- dynamicCorrelation(dataFrame=dynCorrData,
-                             depVar=c('resp1', 'resp2', 'resp3'),
-                             indepVar='time',
+examp3 <- dynamicCorrelation(dataFrame = dynCorrData,
+                             depVar = c('resp1', 'resp2', 'resp3'),
+                             indepVar = 'time',
                              subjectVar = 'subject',
+                             points.by = 1,
                              function.choice = c(1,0,0),
-                             lag.input=seq(-20,10, by=1),
-                             full.lag.output=TRUE)
+                             lag.input = seq(-20,10, by=1),
+                             full.lag.output = TRUE)
 
 # conduct plotting, with one panel for each pair of responses considered;
 # the ylim adjustment is made here for the different magnitude of the
@@ -188,9 +238,10 @@ abline(v = examp3$max.dynCorrLag[[1]][1,3], lty = 2)
 ##            except now adjust the constant global bandwidth
 ##            from the default to 40
 
-examp4 <- dynamicCorrelation(dataFrame=dynCorrData,
-                             depVar=c('resp1', 'resp2', 'resp3'),
-                             indepVar='time',
+examp4 <- dynamicCorrelation(dataFrame = dynCorrData,
+                             depVar = c('resp1', 'resp2', 'resp3'),
+                             indepVar = 'time',
+                             points.by = 1,
                              subjectVar = 'subject',
                              function.choice = c(1,0,0),
                              width.range = c(40, 40))
